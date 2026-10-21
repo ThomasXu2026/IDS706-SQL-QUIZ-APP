@@ -120,28 +120,86 @@ except Exception:
 
 
 # Show the login form
+
 if user is None:
-    st.subheader("Sign In")
+    login_tab, signup_tab = st.tabs(["Sign In", "Sign Up"])
 
-    with st.form("login"):
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        login = st.form_submit_button("Login")
+    # Sign in with an existing account
+    with login_tab:
+        st.subheader("Sign In")
 
-    if login:
-        try:
-            response = supabase.auth.sign_in_with_password({
-                "email": email,
-                "password": password
-            })
+        with st.form("login"):
+            email = st.text_input("Email")
+            password = st.text_input(
+                "Password", type="password"
+            )
+            login = st.form_submit_button("Login")
 
-            if response.user and response.session:
-                st.rerun()
+        if login:
+            try:
+                response = supabase.auth.sign_in_with_password({
+                    "email": email,
+                    "password": password
+                })
+
+                if response.user and response.session:
+                    st.rerun()
+                else:
+                    st.error("Login failed.")
+
+            except Exception:
+                st.error("Invalid email or password.")
+
+    # Register a new account
+    with signup_tab:
+        st.subheader("Create Account")
+
+        with st.form("signup"):
+            new_email = st.text_input("Email Address")
+            new_password = st.text_input(
+                "Password", type="password"
+            )
+            confirm_password = st.text_input(
+                "Confirm Password", type="password"
+            )
+            signup = st.form_submit_button("Create Account")
+
+        if signup:
+            if not new_email.strip():
+                st.warning("Please enter an email address.")
+
+            elif len(new_password) < 8:
+                st.warning("Password must have at least 8 characters.")
+
+            elif new_password != confirm_password:
+                st.error("Passwords do not match.")
+
             else:
-                st.error("Login failed.")
+                try:
+                    response = supabase.auth.sign_up({
+                        "email": new_email.strip(),
+                        "password": new_password
+                    })
 
-        except Exception:
-            st.error("Login failed. Check your credentials.")
+                    if response.session:
+                        st.success("Account created successfully!")
+                        st.rerun()
+
+                    elif response.user:
+                        st.success(
+                            "Registration submitted. "
+                            "Please check your email to confirm "
+                            "your account, then sign in."
+                        )
+
+                except Exception:
+                    st.error(
+                        "Registration failed. "
+                        "Please check the email settings."
+                    )
+
+    st.stop()
+
 
 else:
     st.success(f"Logged in as {user.email}")
