@@ -7,7 +7,11 @@ The application allows students to sign in, answer SQL questions, execute querie
 
 ## Live Application
 
-**Quiz URL:** To be added after deployment.
+**Quiz URL:** https://ids706-sql-quiz-app-frp9u6b3ezf8spswjsjdlu.streamlit.app/
+
+**GitHub Repository:** https://github.com/ThomasXu2026/IDS706-SQL-QUIZ-APP
+
+Students can create an account, sign in, run SQL queries, save answers, and view their quiz results.
 
 ## Features
 
@@ -68,14 +72,15 @@ Each question includes instructions, expected SQL, and an expected result table.
 
 ## How to Use
 
-1. Open the quiz website.
-2. Sign in using a Supabase Auth account.
-3. Select a question from the dropdown menu.
-4. Write a SQL query in the editor.
-5. Click **Run Query** to execute the query and view the results.
-6. Click **Save Answer** to store the SQL query.
-7. Click **Check Answer** to compare the result with the expected output.
-8. Click **Grade All Saved Answers** to calculate the total score.
+1. Open the live quiz website.
+2. Select **Sign Up** to create an account, or **Sign In** if you already have one.
+3. Confirm your email address if prompted, then sign in.
+4. Select a question from the dropdown menu.
+5. Write a SQL query in the editor.
+6. Click **Run Query** to execute the query and view the results.
+7. Click **Save Answer** to store the SQL query.
+8. Click **Check Answer** to compare the result with the expected output.
+9. Click **Grade All Saved Answers** to calculate the total score.
 
 Students can return to previously saved answers after signing in again.
 
@@ -108,8 +113,8 @@ Database passwords and API configuration are stored in application secrets rathe
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/sql-quiz-app.git
-cd sql-quiz-app
+git clone https://github.com/ThomasXu2026/IDS706-SQL-QUIZ-APP.git
+cd IDS706-SQL-QUIZ-APP
 ```
 
 ### 2. Install dependencies
@@ -161,25 +166,36 @@ Sign in using a Supabase Auth account.
 
 ## GitHub Actions
 
-GitHub Actions will be configured to test the hosted PostgreSQL database connection using GitHub Secrets.
+GitHub Actions automatically tests the connection to the hosted Supabase PostgreSQL database.
 
-Database credentials will be stored in repository secrets rather than directly in the workflow file.
+The workflow is defined in `.github/workflows/database-test.yml`.
 
-The workflow configuration and successful execution will be added before final submission.
+The test verifies:
+- Successful PostgreSQL connection using the `quiz_reader` role
+- Expected row counts in the four practice tables
+- Read-only database permissions
+
+Database credentials are securely stored using GitHub Actions Repository Secrets.
+
+The workflow runs automatically on pushes to the `main` branch and can also be triggered manually.
+
+**Workflow Status:** Successfully tested.
+
+**Actions:** https://github.com/ThomasXu2026/IDS706-SQL-QUIZ-APP/actions
 
 ## Deployment
 
-The application will be deployed using Streamlit Community Cloud.
+The application is deployed on Streamlit Community Cloud.
 
-Deployment steps:
+- Hosting: Streamlit Community Cloud
+- Database: Supabase PostgreSQL
+- Authentication: Supabase Auth
+- Source: GitHub main branch
+- Main file: app.py
 
-1. Push the project to a GitHub repository.
-2. Connect the repository to Streamlit Community Cloud.
-3. Select `app.py` as the main application file.
-4. Configure the required Supabase and PostgreSQL secrets.
-5. Deploy and test the application.
+Application secrets are configured securely in Streamlit Community Cloud.
 
-The public application URL will be added to this README after deployment.
+Live URL: https://ids706-sql-quiz-app-frp9u6b3ezf8spswjsjdlu.streamlit.app/
 
 ## Project Structure
 
