@@ -1,10 +1,11 @@
 
 import psycopg
 import streamlit as st
-from decimal import Decimal
 from datetime import datetime, timezone
 from supabase import create_client
+from database import check_result, run_sql
 from questions import QUESTIONS
+from rag import RAGService, suggested_question_id
 
 st.set_page_config(
     page_title="SQL Quiz",
@@ -13,71 +14,6 @@ st.set_page_config(
 
 st.title("SQL Quiz")
 st.write("Welcome to the Online Store SQL Quiz!")
-
-
-# Execute SQL using the read-only database role
-def run_sql(query):
-    query = query.strip()
-
-    if not query:
-        raise ValueError("Please enter a SQL query.")
-
-    if len(query) > 3000:
-        raise ValueError("Query is too long.")
-
-    if not query.upper().startswith("SELECT"):
-        raise ValueError("Only SELECT queries are allowed.")
-
-    with psycopg.connect(
-        host=st.secrets["DB_HOST"],
-        port=st.secrets["DB_PORT"],
-        dbname=st.secrets["DB_NAME"],
-        user=st.secrets["DB_USER"],
-        password=st.secrets["DB_PASSWORD"],
-        sslmode="require",
-        connect_timeout=10
-    ) as conn:
-
-        with conn.cursor() as cur:
-            cur.execute("SET TRANSACTION READ ONLY")
-            cur.execute("SET LOCAL statement_timeout = '5s'")
-            cur.execute(query, prepare=True)
-
-            columns = [col.name for col in cur.description]
-            rows = cur.fetchmany(101)
-
-    return columns, rows[:100], len(rows) > 100
-
-
-# Normalize numeric values before comparison
-def normalize_value(value):
-    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
-        return Decimal(str(value))
-    return value
-
-
-# Compare query output with expected results
-def check_result(question, columns, rows, truncated):
-    expected = question["expected"]
-    expected_columns = list(expected[0].keys())
-
-    if columns != expected_columns:
-        return False
-
-    if truncated or len(rows) != len(expected):
-        return False
-
-    for actual_row, expected_row in zip(rows, expected):
-        actual_values = [normalize_value(v) for v in actual_row]
-        expected_values = [
-            normalize_value(expected_row[col])
-            for col in expected_columns
-        ]
-
-        if actual_values != expected_values:
-            return False
-
-    return True
 
 
 # Display query results
@@ -99,6 +35,11 @@ def display_result(columns, rows, truncated):
 def show_sql_error(error):
     message = getattr(error.diag, "message_primary", None)
     st.error(message or "SQL query failed.")
+
+
+@st.cache_resource(show_spinner=False)
+def get_rag_service(api_key, model):
+    return RAGService(api_key=api_key, generation_model=model)
 
 
 # Create a Supabase client for this browser session
@@ -314,7 +255,7 @@ else:
     # Run the SQL query and show results
     if run_clicked:
         try:
-            columns, rows, truncated = run_sql(sql_query)
+            columns, rows, truncated = run_sql(sql_query, st.secrets)
             display_result(columns, rows, truncated)
 
         except ValueError as e:
@@ -329,7 +270,7 @@ else:
     # Check the current answer against expected results
     if check_clicked:
         try:
-            columns, rows, truncated = run_sql(sql_query)
+            columns, rows, truncated = run_sql(sql_query, st.secrets)
             display_result(columns, rows, truncated)
 
             correct = check_result(
@@ -388,7 +329,7 @@ else:
                     continue
 
                 try:
-                    columns, rows, truncated = run_sql(saved_sql)
+                    columns, rows, truncated = run_sql(saved_sql, st.secrets)
 
                     correct = check_result(
                         q, columns, rows, truncated
@@ -415,6 +356,131 @@ else:
 
         except Exception:
             st.error("Unable to grade saved answers.")
+
+    # RAG Text-to-SQL assistant
+    st.divider()
+    st.header("RAG Text-to-SQL Assistant")
+    st.write(
+        "Ask a question in plain English. The assistant retrieves relevant "
+        "schema, business definitions, and solved examples from ChromaDB before "
+        "Gemini generates PostgreSQL."
+    )
+
+    gemini_api_key = st.secrets.get("GEMINI_API_KEY", "")
+    generation_model = st.secrets.get("GEMINI_MODEL", "gemini-3.8-flash")
+
+    if not gemini_api_key:
+        st.info(
+            "The RAG assistant is unavailable because GEMINI_API_KEY is not "
+            "configured in this deployment's secrets."
+        )
+    else:
+        with st.form("rag_generation"):
+            natural_language_question = st.text_area(
+                "Natural-language database question",
+                placeholder=(
+                    "Example: Which customers placed more than two orders?"
+                ),
+                height=100,
+            )
+            validation_options = ["Auto-detect", "No validation"] + [
+                f"Q{index}: {question['title']}"
+                for index, question in enumerate(QUESTIONS, start=1)
+            ]
+            validation_choice = st.selectbox(
+                "Expected result for verification",
+                validation_options,
+                help=(
+                    "Auto-detect uses the closest retrieved solved example. "
+                    "Choose a quiz question when you want an exact target."
+                ),
+            )
+            generate_clicked = st.form_submit_button(
+                "Retrieve Context and Generate SQL",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if generate_clicked:
+            try:
+                with st.spinner("Retrieving evidence and generating SQL..."):
+                    service = get_rag_service(
+                        gemini_api_key,
+                        generation_model,
+                    )
+                    retrieved = service.retrieve(natural_language_question)
+                    draft = service.generate_sql(
+                        natural_language_question,
+                        retrieved,
+                    )
+                if validation_choice == "Auto-detect":
+                    target_id = suggested_question_id(retrieved)
+                elif validation_choice == "No validation":
+                    target_id = None
+                else:
+                    target_id = validation_options.index(validation_choice) - 1
+
+                st.session_state.rag_draft = draft
+                st.session_state.rag_target_id = target_id
+            except ValueError as error:
+                st.warning(str(error))
+            except Exception:
+                st.error(
+                    "RAG generation failed. Check the Gemini service and try again."
+                )
+
+        draft = st.session_state.get("rag_draft")
+        if draft:
+            st.subheader("Generated SQL")
+            st.code(draft.sql, language="sql")
+            st.caption(draft.explanation)
+
+            with st.expander("Retrieved ChromaDB evidence", expanded=True):
+                for index, document in enumerate(draft.retrieved, start=1):
+                    st.markdown(
+                        f"**{index}. {document.title}** — `{document.kind}` "
+                        f"(distance {document.distance:.3f})"
+                    )
+                    st.write(document.content)
+
+            target_id = st.session_state.get("rag_target_id")
+            if target_id:
+                st.info(
+                    f"Execution will be verified against Q{target_id}: "
+                    f"{QUESTIONS[target_id - 1]['title']}."
+                )
+            else:
+                st.info(
+                    "No expected result is selected; execution results will still "
+                    "be displayed."
+                )
+
+            if st.button(
+                "Run Generated SQL and Verify",
+                use_container_width=True,
+            ):
+                try:
+                    columns, rows, truncated = run_sql(draft.sql, st.secrets)
+                    display_result(columns, rows, truncated)
+                    if target_id:
+                        if check_result(
+                            QUESTIONS[target_id - 1],
+                            columns,
+                            rows,
+                            truncated,
+                        ):
+                            st.success("Generated SQL matches the expected result.")
+                        else:
+                            st.warning(
+                                "Generated SQL ran safely, but its output does not "
+                                "match the selected expected result."
+                            )
+                except ValueError as error:
+                    st.warning(str(error))
+                except psycopg.Error as error:
+                    show_sql_error(error)
+                except Exception:
+                    st.error("Unable to run the generated query.")
 
     # Log out and clear local answers
     st.divider()
