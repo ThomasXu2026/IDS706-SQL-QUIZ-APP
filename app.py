@@ -37,6 +37,26 @@ def show_sql_error(error):
     st.error(message or "SQL query failed.")
 
 
+# Execute generated SQL through the same read-only path used by the quiz and
+# return a render-ready result with an optional expected-answer comparison.
+def execute_generated_sql(sql, target_id, secrets):
+    columns, rows, truncated = run_sql(sql, secrets)
+    matched = None
+    if target_id:
+        matched = check_result(
+            QUESTIONS[target_id - 1],
+            columns,
+            rows,
+            truncated,
+        )
+    return {
+        "columns": columns,
+        "rows": rows,
+        "truncated": truncated,
+        "matched": matched,
+    }
+
+
 @st.cache_resource(show_spinner=False)
 def get_rag_service(api_key, model):
     return RAGService(api_key=api_key, generation_model=model)
@@ -429,11 +449,25 @@ else:
 
                 st.session_state.rag_draft = draft
                 st.session_state.rag_target_id = target_id
-                # Mark the new draft for one automatic, read-only execution.
-                # The flag is consumed below so ordinary Streamlit reruns do not
-                # repeatedly query the database.
-                st.session_state.rag_auto_run_pending = True
                 st.session_state.pop("rag_execution", None)
+
+                # Execute directly in the generation submission so the result
+                # does not depend on a later Streamlit rerun or button click.
+                try:
+                    with st.spinner(
+                        "Executing generated SQL with read-only access..."
+                    ):
+                        st.session_state.rag_execution = execute_generated_sql(
+                            draft.sql,
+                            target_id,
+                            st.secrets,
+                        )
+                except ValueError as error:
+                    st.warning(str(error))
+                except psycopg.Error as error:
+                    show_sql_error(error)
+                except Exception:
+                    st.error("Unable to run the generated query.")
             except ValueError as error:
                 st.warning(str(error))
             except Exception:
@@ -467,42 +501,20 @@ else:
                     "be displayed."
                 )
 
-            # Execute once immediately after generation to satisfy the optional
-            # automatic-execution workflow. The button remains as a safe retry.
-            should_execute = st.session_state.pop(
-                "rag_auto_run_pending",
-                False,
-            )
+            # Keep a manual retry without making it part of the main workflow.
             if st.button(
                 "Re-run Generated SQL and Verify",
                 use_container_width=True,
             ):
-                should_execute = True
-
-            if should_execute:
                 try:
                     with st.spinner(
                         "Executing generated SQL with read-only access..."
                     ):
-                        columns, rows, truncated = run_sql(
+                        st.session_state.rag_execution = execute_generated_sql(
                             draft.sql,
+                            target_id,
                             st.secrets,
                         )
-                    matched = None
-                    if target_id:
-                        matched = check_result(
-                            QUESTIONS[target_id - 1],
-                            columns,
-                            rows,
-                            truncated,
-                        )
-                    # Cache the result so it remains visible on later UI reruns.
-                    st.session_state.rag_execution = {
-                        "columns": columns,
-                        "rows": rows,
-                        "truncated": truncated,
-                        "matched": matched,
-                    }
                 except ValueError as error:
                     st.session_state.pop("rag_execution", None)
                     st.warning(str(error))
