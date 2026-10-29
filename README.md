@@ -73,6 +73,20 @@ Student-written and Gemini-generated SQL both use the dedicated `quiz_reader` da
 7. Review the generated SQL, explanation, retrieved evidence, evidence types, and distances.
 8. Select **Run Generated SQL and Verify** to execute the query and compare its output with the expected result.
 
+## Assignment screenshots
+
+### Basic requirement: question to generated SQL
+
+The deployed app accepts a natural-language quiz question and uses retrieved ChromaDB context before Gemini generates PostgreSQL.
+
+![Natural-language question and Gemini-generated SQL](https://github.com/user-attachments/assets/30992ed1-1a02-4f6a-bc9c-b9f473cc6e8e)
+
+### Extra credit: read-only execution and validation
+
+The generated query executes through the read-only database path, displays the result table, and verifies the rows against the expected quiz result.
+
+![Generated SQL execution, result table, and successful validation](https://github.com/user-attachments/assets/5cfbfeae-0f07-4ef7-b95c-8dfdd1723c4b)
+
 ## Local setup
 
 Use Python 3.12.
@@ -109,7 +123,7 @@ The deployed application reads the same names from Streamlit Community Cloud Sec
 Run the secret-free unit tests locally:
 
 ```bash
-pytest -q tests/test_core.py
+python -m pytest -q tests/test_core.py
 ```
 
 They verify SQL safety rules, numeric result normalization, and the presence of all three RAG evidence types. GitHub Actions runs these tests for pull requests and pushes to `main`.
