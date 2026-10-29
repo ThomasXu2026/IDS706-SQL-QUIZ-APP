@@ -429,6 +429,11 @@ else:
 
                 st.session_state.rag_draft = draft
                 st.session_state.rag_target_id = target_id
+                # Mark the new draft for one automatic, read-only execution.
+                # The flag is consumed below so ordinary Streamlit reruns do not
+                # repeatedly query the database.
+                st.session_state.rag_auto_run_pending = True
+                st.session_state.pop("rag_execution", None)
             except ValueError as error:
                 st.warning(str(error))
             except Exception:
@@ -462,32 +467,67 @@ else:
                     "be displayed."
                 )
 
+            # Execute once immediately after generation to satisfy the optional
+            # automatic-execution workflow. The button remains as a safe retry.
+            should_execute = st.session_state.pop(
+                "rag_auto_run_pending",
+                False,
+            )
             if st.button(
-                "Run Generated SQL and Verify",
+                "Re-run Generated SQL and Verify",
                 use_container_width=True,
             ):
+                should_execute = True
+
+            if should_execute:
                 try:
-                    columns, rows, truncated = run_sql(draft.sql, st.secrets)
-                    display_result(columns, rows, truncated)
+                    with st.spinner(
+                        "Executing generated SQL with read-only access..."
+                    ):
+                        columns, rows, truncated = run_sql(
+                            draft.sql,
+                            st.secrets,
+                        )
+                    matched = None
                     if target_id:
-                        if check_result(
+                        matched = check_result(
                             QUESTIONS[target_id - 1],
                             columns,
                             rows,
                             truncated,
-                        ):
-                            st.success("Generated SQL matches the expected result.")
-                        else:
-                            st.warning(
-                                "Generated SQL ran safely, but its output does not "
-                                "match the selected expected result."
-                            )
+                        )
+                    # Cache the result so it remains visible on later UI reruns.
+                    st.session_state.rag_execution = {
+                        "columns": columns,
+                        "rows": rows,
+                        "truncated": truncated,
+                        "matched": matched,
+                    }
                 except ValueError as error:
+                    st.session_state.pop("rag_execution", None)
                     st.warning(str(error))
                 except psycopg.Error as error:
+                    st.session_state.pop("rag_execution", None)
                     show_sql_error(error)
                 except Exception:
+                    st.session_state.pop("rag_execution", None)
                     st.error("Unable to run the generated query.")
+
+            execution = st.session_state.get("rag_execution")
+            if execution:
+                st.success("Generated SQL executed automatically with read-only access.")
+                display_result(
+                    execution["columns"],
+                    execution["rows"],
+                    execution["truncated"],
+                )
+                if execution["matched"] is True:
+                    st.success("Generated SQL matches the expected result.")
+                elif execution["matched"] is False:
+                    st.warning(
+                        "Generated SQL ran safely, but its output does not "
+                        "match the selected expected result."
+                    )
 
     # Log out and clear local answers
     st.divider()
