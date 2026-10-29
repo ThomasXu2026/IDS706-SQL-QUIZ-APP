@@ -67,7 +67,7 @@ Student-written and Gemini-generated SQL both use the dedicated `quiz_reader` da
 1. Open the [live application](https://ids706-sql-quiz-app-frp9u6b3ezf8spswjsjdlu.streamlit.app/).
 2. Create an account or sign in.
 3. Use the original quiz to run, save, check, and grade SQL answers.
-4. In **RAG Text-to-SQL Assistant**, enter a database question in plain English.
+4. In **RAG Text-to-SQL Assistant**, use the preloaded selected quiz question or enter another database question in plain English.
 5. Keep **Auto-detect** validation or select a specific quiz result.
 6. Select **Retrieve Context and Generate SQL**.
 7. Review the generated SQL, explanation, retrieved evidence, evidence types, and distances.

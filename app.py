@@ -376,8 +376,11 @@ else:
         )
     else:
         with st.form("rag_generation"):
+            # Preload the currently selected quiz prompt so the required
+            # quiz-question-to-SQL workflow is immediately testable.
             natural_language_question = st.text_area(
                 "Natural-language database question",
+                value=question["description"],
                 placeholder=(
                     "Example: Which customers placed more than two orders?"
                 ),
@@ -403,6 +406,10 @@ else:
 
         if generate_clicked:
             try:
+                if not natural_language_question.strip():
+                    raise ValueError(
+                        "Please enter a natural-language question."
+                    )
                 with st.spinner("Retrieving evidence and generating SQL..."):
                     service = get_rag_service(
                         gemini_api_key,
