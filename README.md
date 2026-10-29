@@ -1,141 +1,91 @@
+# Online Store SQL Quiz + RAG Text-to-SQL
 
-# Online Store SQL Quiz
+[Live Streamlit application](https://ids706-sql-quiz-app-frp9u6b3ezf8spswjsjdlu.streamlit.app/) · [GitHub Actions](https://github.com/ThomasXu2026/IDS706-SQL-QUIZ-APP/actions)
 
-A web-based SQL quiz built with Python, Streamlit, Supabase, and PostgreSQL.
+This IDS 706 project combines the original authenticated five-question SQL quiz with the optional RAG Text-to-SQL assignment and its extra-credit execution and verification flow.
 
-The application allows students to sign in, answer SQL questions, execute queries against a hosted PostgreSQL database, and view their results. Students can also save answers and check their scores.
+## Assignment coverage
 
-## Live Application
+| Requirement | Implementation |
+|---|---|
+| Preserve the existing SQL quiz | Authentication, five questions, saved answers, execution, grading, and total score remain available |
+| Actual vector retrieval | Gemini embeddings are stored in ChromaDB and queried with cosine nearest-neighbor search |
+| Schema retrieval | Separate documents describe `customers`, `products`, `orders`, and `order_items` |
+| Business-semantics retrieval | Documents define sales revenue, order count, zero-order handling, naming, and ordering rules |
+| Few-shot retrieval | All five solved quiz questions are indexed as natural-language/SQL examples |
+| LLM-generated SQL | Gemini receives only the question and Chroma-retrieved context, then returns structured PostgreSQL |
+| Extra credit: safe execution | Generated SQL is parsed, restricted to one read-only query, and run as `quiz_reader` in a read-only transaction |
+| Extra credit: display and validation | The app displays query results and checks them against an automatically retrieved or explicitly selected expected result |
 
-**Quiz URL:** https://ids706-sql-quiz-app-frp9u6b3ezf8spswjsjdlu.streamlit.app/
+## RAG architecture
 
-**GitHub Repository:** https://github.com/ThomasXu2026/IDS706-SQL-QUIZ-APP
+```mermaid
+flowchart LR
+    Q[Natural-language question] --> QE[Gemini query embedding]
+    KB[Schema + business semantics + five SQL examples] --> DE[Gemini document embeddings]
+    DE --> C[(ChromaDB cosine index)]
+    QE --> C
+    C --> R[Top-k retrieved evidence]
+    R --> G[Gemini structured SQL generation]
+    Q --> G
+    G --> V[SQLGlot AST safety validation]
+    V --> DB[(Supabase PostgreSQL)]
+    DB --> O[Result table]
+    O --> E[Expected-result verification]
+```
 
-Students can create an account, sign in, run SQL queries, save answers, and view their quiz results.
+The index is built once per Streamlit process and cached. `gemini-embedding-001` creates 768-dimensional, normalized document and query vectors. ChromaDB performs the actual similarity search and returns evidence plus distances. Gemini then generates JSON with `sql` and `explanation` fields using the retrieved evidence.
 
 ## Features
 
-- Email and password authentication using Supabase Auth
-- Hosted PostgreSQL database with sample retail data
-- Five SQL questions worth 20 points total
-- Interactive SQL editor with live query execution
-- Expected SQL and results provided as hints
-- Save and retrieve answers for each authenticated user
-- Automatic grading based on query results
-- Read-only database access for student queries
-
-## Technology Stack
-
-| Technology | Purpose |
-|---|---|
-| Python | Backend logic |
-| Streamlit | Web interface |
-| Supabase | Authentication and hosted PostgreSQL |
-| psycopg | PostgreSQL connection and query execution |
-| GitHub Actions | Automated database connection testing |
-| Streamlit Community Cloud | Web hosting |
+- Supabase email/password authentication
+- Five SQL questions worth 20 points
+- Saved answers protected by Supabase Row Level Security
+- Interactive execution and automatic result-based grading
+- Gemini + ChromaDB RAG Text-to-SQL assistant
+- Visible retrieval evidence and similarity distances
+- Automatic or manual expected-result selection
+- Generated-SQL execution, table display, and correctness verification
+- SQL parser validation, dedicated `quiz_reader` role, read-only transactions, five-second timeout, and 100-row display limit
 
 ## Database
 
-The application uses a hosted Supabase PostgreSQL database.
+The hosted Supabase PostgreSQL database contains:
 
-### Tables
-
-| Table | Description |
+| Table | Purpose |
 |---|---|
-| customers | Customer information |
-| products | Product names, categories, and prices |
-| orders | Customer orders and dates |
-| order_items | Ordered products, quantities, and prices |
-| quiz_answers | Saved SQL answers associated with authenticated users |
+| `customers` | Customer names and identifiers |
+| `products` | Product names and catalog prices |
+| `orders` | Customer order headers |
+| `order_items` | Product, quantity, and charged unit price for each order line |
+| `quiz_answers` | Authenticated users' saved SQL answers, protected by RLS |
 
-The database contains sample online retail data used for SQL practice.
+Student-written and Gemini-generated SQL both use the dedicated `quiz_reader` database role. The role has `SELECT` access to the four practice tables and no write privileges.
 
-The `quiz_answers` table uses Row Level Security (RLS) so that authenticated users can only access their own saved answers.
+## How to use the deployed app
 
-## SQL Quiz
+1. Open the [live application](https://ids706-sql-quiz-app-frp9u6b3ezf8spswjsjdlu.streamlit.app/).
+2. Create an account or sign in.
+3. Use the original quiz to run, save, check, and grade SQL answers.
+4. In **RAG Text-to-SQL Assistant**, use the preloaded selected quiz question or enter another database question in plain English.
+5. Keep **Auto-detect** validation or select a specific quiz result.
+6. Select **Retrieve Context and Generate SQL**.
+7. Review the generated SQL, explanation, retrieved evidence, evidence types, and distances.
+8. Select **Run Generated SQL and Verify** to execute the query and compare its output with the expected result.
 
-The quiz contains five questions, each worth four points.
+## Local setup
 
-| Question | Topic | Points |
-|---|---|---|
-| Q1 | Product Filtering | 4 |
-| Q2 | Top 5 Products | 4 |
-| Q3 | Orders by Customer | 4 |
-| Q4 | Frequent Customers | 4 |
-| Q5 | Sales by Product | 4 |
-| **Total** | | **20** |
-
-Questions cover SELECT, WHERE, ORDER BY, LIMIT, JOIN, GROUP BY, HAVING, COUNT, and SUM.
-
-Each question includes instructions, expected SQL, and an expected result table.
-
-## How to Use
-
-1. Open the live quiz website.
-2. Select **Sign Up** to create an account, or **Sign In** if you already have one.
-3. Confirm your email address if prompted, then sign in.
-4. Select a question from the dropdown menu.
-5. Write a SQL query in the editor.
-6. Click **Run Query** to execute the query and view the results.
-7. Click **Save Answer** to store the SQL query.
-8. Click **Check Answer** to compare the result with the expected output.
-9. Click **Grade All Saved Answers** to calculate the total score.
-
-Students can return to previously saved answers after signing in again.
-
-## Automatic Grading
-
-Each question is worth four points.
-
-The grading system compares the executed query result with the expected result, including column names, row values, and result order.
-
-Correct answers receive four points, while incorrect or missing answers receive zero points.
-
-Different SQL statements are accepted if they produce the expected result.
-
-The total score is calculated from the user's saved SQL answers.
-
-## Authentication and Security
-
-Supabase Auth manages user authentication.
-
-Unauthenticated users cannot execute SQL queries or save quiz answers through the application.
-
-Student SQL queries use a dedicated PostgreSQL role, `quiz_reader`, which has SELECT permissions on the four practice tables.
-
-Database queries run in read-only transactions with a five-second statement timeout.
-
-Database passwords and API configuration are stored in application secrets rather than committed to GitHub.
-
-## Local Setup
-
-### 1. Clone the repository
+Use Python 3.12.
 
 ```bash
 git clone https://github.com/ThomasXu2026/IDS706-SQL-QUIZ-APP.git
 cd IDS706-SQL-QUIZ-APP
-```
-
-### 2. Install dependencies
-
-```bash
 python -m venv .venv
-```
-
-Activate the virtual environment, then run:
-
-```bash
 pip install -r requirements.txt
+streamlit run app.py
 ```
 
-### 3. Configure Supabase
-
-Create a Supabase project with the required PostgreSQL tables and enable email authentication.
-
-Create a read-only database role for executing student SQL queries.
-
-Create `.streamlit/secrets.toml` with the following configuration:
+Create `.streamlit/secrets.toml` locally. Never commit this file.
 
 ```toml
 SUPABASE_URL = "YOUR_SUPABASE_URL"
@@ -146,74 +96,57 @@ DB_PORT = 5432
 DB_NAME = "postgres"
 DB_USER = "YOUR_READ_ONLY_DATABASE_USER"
 DB_PASSWORD = "YOUR_READ_ONLY_DATABASE_PASSWORD"
+
+GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"
+# Optional; defaults to the stable gemini-3.8-flash model
+GEMINI_MODEL = "gemini-3.8-flash"
 ```
 
-Use the Supabase Session Pooler connection parameters and require SSL for database connections.
+The deployed application reads the same names from Streamlit Community Cloud Secrets. No API key or database password is stored in the repository.
 
-Do not commit `secrets.toml` or database passwords to GitHub.
+## Testing and CI
 
-### 4. Run the application
+Run the secret-free unit tests locally:
 
 ```bash
-streamlit run app.py
+pytest -q tests/test_core.py
 ```
 
-Open the local application at:
+They verify SQL safety rules, numeric result normalization, and the presence of all three RAG evidence types. GitHub Actions runs these tests for pull requests and pushes to `main`.
 
-http://localhost:8501
+The protected database integration test runs on `main` and manual dispatch using GitHub repository secrets. It verifies:
 
-Sign in using a Supabase Auth account.
+- connection as `quiz_reader`;
+- expected row counts in the four practice tables; and
+- absence of `INSERT` permission.
 
-## GitHub Actions
+Gemini calls are intentionally not made in CI, so the Gemini key remains only in Streamlit Cloud Secrets and API usage is not consumed by routine test runs.
 
-GitHub Actions automatically tests the connection to the hosted Supabase PostgreSQL database.
+## Project structure
 
-The workflow is defined in `.github/workflows/database-test.yml`.
-
-The test verifies:
-- Successful PostgreSQL connection using the `quiz_reader` role
-- Expected row counts in the four practice tables
-- Read-only database permissions
-
-Database credentials are securely stored using GitHub Actions Repository Secrets.
-
-The workflow runs automatically on pushes to the `main` branch and can also be triggered manually.
-
-**Workflow Status:** Successfully tested.
-
-**Actions:** https://github.com/ThomasXu2026/IDS706-SQL-QUIZ-APP/actions
+```text
+.
+├── app.py                     # Streamlit quiz and RAG user interface
+├── database.py                # SQL AST validation, read-only execution, grading
+├── knowledge_base.py          # Schema, semantics, and few-shot documents
+├── rag.py                     # Gemini embeddings, Chroma retrieval, generation
+├── questions.py               # Five questions and expected results
+├── requirements.txt
+├── tests/
+│   ├── test_core.py           # Secret-free unit tests
+│   └── test_database.py       # Hosted database integration test
+└── .github/workflows/
+    └── database-test.yml
+```
 
 ## Deployment
 
-The application is deployed on Streamlit Community Cloud.
-
 - Hosting: Streamlit Community Cloud
-- Database: Supabase PostgreSQL
-- Authentication: Supabase Auth
-- Source: GitHub main branch
-- Main file: app.py
+- Source branch: `main`
+- Main file: `app.py`
+- Authentication and database: Supabase
+- Vector store: in-memory ChromaDB, rebuilt and cached per app process
+- Embeddings and SQL generation: Gemini API
+- Live URL: https://ids706-sql-quiz-app-frp9u6b3ezf8spswjsjdlu.streamlit.app/
 
-Application secrets are configured securely in Streamlit Community Cloud.
-
-Live URL: https://ids706-sql-quiz-app-frp9u6b3ezf8spswjsjdlu.streamlit.app/
-
-## Project Structure
-
-```text
-sql-quiz-app/
-├── app.py
-├── questions.py
-├── requirements.txt
-├── README.md
-├── .gitignore
-└── .streamlit/
-    └── secrets.toml  (local only)
-```
-
-## Notes
-
-The quiz is designed for educational SQL practice using sample retail data.
-
-The database and authentication services are hosted on Supabase. Students interact with the database through the Streamlit application.
-
-SQL answers are stored in PostgreSQL, while grades are calculated when the grading function is executed.
+Streamlit Community Cloud redeploys from `main`. After a deployment, verify sign-in, one original quiz query, retrieval evidence, generated SQL, safe execution, and expected-result matching.
