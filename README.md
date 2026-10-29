@@ -85,7 +85,7 @@ The deployed app accepts a natural-language quiz question and uses retrieved Chr
 
 The generated query executes through the read-only database path, displays the result table, and verifies the rows against the expected quiz result.
 
-![Generated SQL execution, result table, and successful validation](https://github.com/user-attachments/assets/399fe4b5-c0d6-44a6-a5d2-b4fbd2d4c32a)
+![Generated SQL execution, result table, and successful validation](https://github.com/user-attachments/assets/5cfbfeae-0f07-4ef7-b95c-8dfdd1723c4b)
 
 ## Local setup
 
